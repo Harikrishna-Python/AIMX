@@ -25,9 +25,11 @@ public class MainActivity extends Activity {
         float progress = 0f;
         float sensitivity = 1.0f;
         float speedMultiplier = 1.0f;
+        float maxDistance = 1.0f;
         float lastPointerProjection = 0f;
 
         int speedMode = 1;
+        int distanceMode = 3;
 
         boolean ready = false;
         boolean dragging = false;
@@ -42,6 +44,14 @@ public class MainActivity extends Activity {
             ax = sx;
             ay = sy;
             invalidate();
+        }
+
+        void updatePosition() {
+            float dx = tx - sx;
+            float dy = ty - sy;
+
+            ax = sx + progress * dx;
+            ay = sy + progress * dy;
         }
 
         void updateSensitivity(float x) {
@@ -66,6 +76,15 @@ public class MainActivity extends Activity {
                 speedMultiplier = 1.5f;
             }
 
+            invalidate();
+        }
+
+        void setMaxDistance(int mode) {
+            distanceMode = mode;
+            maxDistance = (mode + 1) * 0.25f;
+
+            progress = Math.min(progress, maxDistance);
+            updatePosition();
             invalidate();
         }
 
@@ -116,7 +135,7 @@ public class MainActivity extends Activity {
             text(c, "DRAG THE CROSSHAIR TOWARDS TARGET",
                     30, 160, 13, white);
 
-            // Sensitivity slider
+            // Sensitivity control
             text(c, "SENSITIVITY: "
                     + String.format("%.2f", sensitivity) + "x",
                     30, 205, 15, cyan);
@@ -149,23 +168,26 @@ public class MainActivity extends Activity {
             // Drag speed selector
             text(c, "DRAG SPEED", 30, 315, 15, cyan);
 
-            String[] speedNames = {"SLOW 0.5x",
-                    "NORMAL 1x", "FAST 1.5x"};
+            String[] speedNames = {
+                    "SLOW 0.5x",
+                    "NORMAL 1x",
+                    "FAST 1.5x"
+            };
 
-            float buttonTop = 330;
-            float buttonBottom = 380;
-            float buttonWidth = (getWidth() - 80) / 3f;
+            float speedTop = 330;
+            float speedBottom = 380;
+            float speedWidth = (getWidth() - 80) / 3f;
 
             for (int i = 0; i < 3; i++) {
-                float left = 30 + i * (buttonWidth + 10);
-                float right = left + buttonWidth;
+                float left = 30 + i * (speedWidth + 10);
+                float right = left + speedWidth;
 
                 p.setStyle(Paint.Style.FILL);
                 p.setColor(speedMode == i
                         ? 0xFF183F50 : 0xFF202A3A);
 
-                c.drawRoundRect(left, buttonTop,
-                        right, buttonBottom, 10, 10, p);
+                c.drawRoundRect(left, speedTop,
+                        right, speedBottom, 10, 10, p);
 
                 p.setTextSize(12);
                 p.setTypeface(
@@ -175,8 +197,44 @@ public class MainActivity extends Activity {
 
                 text(c, speedNames[i],
                         (left + right - textWidth) / 2f,
-                        buttonTop + 30, 12,
+                        speedTop + 30, 12,
                         speedMode == i ? cyan : white);
+            }
+
+            // Maximum distance selector
+            text(c, "MAXIMUM DRAG DISTANCE: "
+                    + (int)(maxDistance * 100) + "%",
+                    30, 415, 15, cyan);
+
+            String[] distanceNames = {
+                    "25%", "50%", "75%", "100%"
+            };
+
+            float distanceTop = 430;
+            float distanceBottom = 480;
+            float distanceWidth = (getWidth() - 84) / 4f;
+
+            for (int i = 0; i < 4; i++) {
+                float left = 30 + i * (distanceWidth + 8);
+                float right = left + distanceWidth;
+
+                p.setStyle(Paint.Style.FILL);
+                p.setColor(distanceMode == i
+                        ? 0xFF183F50 : 0xFF202A3A);
+
+                c.drawRoundRect(left, distanceTop,
+                        right, distanceBottom, 10, 10, p);
+
+                p.setTextSize(14);
+                p.setTypeface(
+                        android.graphics.Typeface.DEFAULT_BOLD);
+
+                float textWidth = p.measureText(distanceNames[i]);
+
+                text(c, distanceNames[i],
+                        (left + right - textWidth) / 2f,
+                        distanceTop + 30, 14,
+                        distanceMode == i ? cyan : white);
             }
 
             // Selected movement path
@@ -184,6 +242,18 @@ public class MainActivity extends Activity {
             p.setStrokeWidth(3);
             p.setStyle(Paint.Style.STROKE);
             c.drawLine(sx, sy, tx, ty, p);
+
+            // Maximum distance boundary
+            float dx = tx - sx;
+            float dy = ty - sy;
+
+            float limitX = sx + maxDistance * dx;
+            float limitY = sy + maxDistance * dy;
+
+            p.setColor(0xFFFFB347);
+            p.setStrokeWidth(2);
+            p.setStyle(Paint.Style.STROKE);
+            c.drawCircle(limitX, limitY, 13, p);
 
             // Target
             p.setColor(green);
@@ -219,7 +289,7 @@ public class MainActivity extends Activity {
             text(c, "RESET",
                     resetLeft + 48, resetTop + 31, 16, white);
 
-            text(c, "MOVEMENT CANNOT PASS TARGET",
+            text(c, "MOVEMENT CANNOT PASS LIMIT",
                     30, getHeight() - 110, 12, cyan);
         }
 
@@ -268,6 +338,25 @@ public class MainActivity extends Activity {
                         }
                     }
 
+                    // Maximum distance buttons
+                    if (y >= 430 && y <= 480) {
+                        float buttonWidth =
+                                (getWidth() - 84) / 4f;
+
+                        int selected = (int)
+                                ((x - 30) / (buttonWidth + 8));
+
+                        if (selected >= 0 && selected <= 3) {
+                            float left = 30
+                                    + selected * (buttonWidth + 8);
+
+                            if (x <= left + buttonWidth) {
+                                setMaxDistance(selected);
+                                return true;
+                            }
+                        }
+                    }
+
                     // Crosshair dragging
                     float distance = (float) Math.hypot(
                             x - ax, y - ay);
@@ -303,16 +392,11 @@ public class MainActivity extends Activity {
                                 * sensitivity * speedMultiplier;
 
                         progress = Math.max(0f,
-                                Math.min(1f, progress));
+                                Math.min(maxDistance, progress));
 
                         lastPointerProjection = pointerProjection;
 
-                        float dx = tx - sx;
-                        float dy = ty - sy;
-
-                        ax = sx + progress * dx;
-                        ay = sy + progress * dy;
-
+                        updatePosition();
                         invalidate();
                     }
                     return true;
