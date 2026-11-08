@@ -34,6 +34,10 @@ public class MainActivity extends Activity {
         boolean ready = false;
         boolean dragging = false;
         boolean adjustingSensitivity = false;
+        boolean dragMoved = false;
+        boolean reachedLimitThisDrag = false;
+        long sessionStartTime = 0;
+        int score = 0;
 
         Trainer() {
             super(MainActivity.this);
@@ -237,6 +241,20 @@ public class MainActivity extends Activity {
                         distanceMode == i ? cyan : white);
             }
 
+            // Practice timer and score
+            long elapsedSeconds = sessionStartTime == 0
+                    ? 0 : (System.currentTimeMillis()
+                    - sessionStartTime) / 1000;
+
+            String timer = String.format("%02d:%02d",
+                    elapsedSeconds / 60, elapsedSeconds % 60);
+
+            text(c, "TIME: " + timer + "    SCORE: " + score,
+                    30, 525, 17, cyan);
+
+            text(c, "+1 POINT WHEN YOU REACH THE LIMIT",
+                    30, 550, 11, white);
+
             // Selected movement path
             p.setColor(0x8846FF96);
             p.setStrokeWidth(3);
@@ -291,6 +309,10 @@ public class MainActivity extends Activity {
 
             text(c, "MOVEMENT CANNOT PASS LIMIT",
                     30, getHeight() - 110, 12, cyan);
+
+            if (sessionStartTime != 0) {
+                postInvalidateDelayed(1000);
+            }
         }
 
         @Override
@@ -309,6 +331,10 @@ public class MainActivity extends Activity {
                     if (x >= resetLeft && x <= resetLeft + 150
                             && y >= resetTop && y <= resetTop + 48) {
                         reset();
+                        score = 0;
+                        sessionStartTime = 0;
+                        dragMoved = false;
+                        invalidate();
                         return true;
                     }
 
@@ -363,6 +389,13 @@ public class MainActivity extends Activity {
 
                     if (distance < 55) {
                         dragging = true;
+                        dragMoved = false;
+                        reachedLimitThisDrag = false;
+
+                        if (sessionStartTime == 0) {
+                            sessionStartTime = System.currentTimeMillis();
+                        }
+
                         lastPointerProjection =
                                 getProjection(x, y);
                     } else {
@@ -388,11 +421,22 @@ public class MainActivity extends Activity {
                         float movement = pointerProjection
                                 - lastPointerProjection;
 
+                        if (Math.abs(movement) > 0.001f) {
+                            dragMoved = true;
+                        }
+
+                        float previousProgress = progress;
+
                         progress += movement
                                 * sensitivity * speedMultiplier;
 
                         progress = Math.max(0f,
                                 Math.min(maxDistance, progress));
+
+                        if (previousProgress < maxDistance - 0.005f
+                                && progress >= maxDistance - 0.005f) {
+                            reachedLimitThisDrag = true;
+                        }
 
                         lastPointerProjection = pointerProjection;
 
@@ -402,8 +446,19 @@ public class MainActivity extends Activity {
                     return true;
 
                 case MotionEvent.ACTION_UP:
+                    if (dragging && dragMoved
+                            && reachedLimitThisDrag) {
+                        score++;
+                    }
+
+                    dragging = false;
+                    dragMoved = false;
+                    invalidate();
+                    return true;
+
                 case MotionEvent.ACTION_CANCEL:
                     dragging = false;
+                    dragMoved = false;
                     adjustingSensitivity = false;
                     return true;
             }
