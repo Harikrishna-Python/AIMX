@@ -22,16 +22,45 @@ public class MainActivity extends Activity {
         Paint p = new Paint(3);
 
         float sx, sy, tx, ty, ax, ay;
-        boolean ready = false, dragging = false;
+        float progress = 0f;
+        float sensitivity = 1.0f;
+        float lastPointerProjection = 0f;
+
+        boolean ready = false;
+        boolean dragging = false;
+        boolean adjustingSensitivity = false;
 
         Trainer() {
             super(MainActivity.this);
         }
 
         void reset() {
+            progress = 0f;
             ax = sx;
             ay = sy;
             invalidate();
+        }
+
+        void updateSensitivity(float x) {
+            float minX = 30;
+            float maxX = getWidth() - 30;
+
+            float value = (x - minX) / (maxX - minX);
+            value = Math.max(0f, Math.min(1f, value));
+
+            sensitivity = 0.25f + value * 1.75f;
+            invalidate();
+        }
+
+        float getProjection(float x, float y) {
+            float dx = tx - sx;
+            float dy = ty - sy;
+            float lengthSquared = dx * dx + dy * dy;
+
+            if (lengthSquared <= 0) return 0f;
+
+            return ((x - sx) * dx + (y - sy) * dy)
+                    / lengthSquared;
         }
 
         void text(Canvas c, String s, float x, float y,
@@ -69,6 +98,35 @@ public class MainActivity extends Activity {
                     30, 135, 13, white);
             text(c, "DRAG THE CROSSHAIR TOWARDS TARGET",
                     30, 160, 13, white);
+
+            // Sensitivity control
+            text(c, "SENSITIVITY: "
+                    + String.format("%.2f", sensitivity) + "x",
+                    30, 205, 15, cyan);
+
+            float sliderY = 235;
+            float sliderLeft = 30;
+            float sliderRight = getWidth() - 30;
+            float sliderPosition = sliderLeft
+                    + ((sensitivity - 0.25f) / 1.75f)
+                    * (sliderRight - sliderLeft);
+
+            p.setStyle(Paint.Style.STROKE);
+            p.setStrokeWidth(6);
+            p.setStrokeCap(Paint.Cap.ROUND);
+            p.setColor(0xFF354354);
+            c.drawLine(sliderLeft, sliderY,
+                    sliderRight, sliderY, p);
+
+            p.setColor(cyan);
+            c.drawLine(sliderLeft, sliderY,
+                    sliderPosition, sliderY, p);
+
+            p.setStyle(Paint.Style.FILL);
+            c.drawCircle(sliderPosition, sliderY, 12, p);
+
+            text(c, "0.25x", sliderLeft, 270, 11, white);
+            text(c, "2.00x", sliderRight - 35, 270, 11, white);
 
             // Selected movement path
             p.setColor(0x8846FF96);
@@ -117,25 +175,36 @@ public class MainActivity extends Activity {
             float x = e.getX();
             float y = e.getY();
 
-            float left = getWidth() / 2f - 75;
-            float top = getHeight() - 85;
+            float resetLeft = getWidth() / 2f - 75;
+            float resetTop = getHeight() - 85;
 
             switch (e.getAction()) {
 
                 case MotionEvent.ACTION_DOWN:
 
-                    if (x >= left && x <= left + 150
-                            && y >= top && y <= top + 48) {
+                    // Reset button
+                    if (x >= resetLeft && x <= resetLeft + 150
+                            && y >= resetTop && y <= resetTop + 48) {
                         reset();
                         return true;
                     }
 
+                    // Sensitivity slider
+                    if (y >= 215 && y <= 260) {
+                        adjustingSensitivity = true;
+                        updateSensitivity(x);
+                        return true;
+                    }
+
+                    // Crosshair dragging
                     float distance = (float) Math.hypot(
                             x - ax, y - ay);
 
                     if (distance < 55) {
                         dragging = true;
+                        lastPointerProjection = getProjection(x, y);
                     } else {
+                        // Select a new target
                         tx = x;
                         ty = y;
                         reset();
@@ -146,23 +215,28 @@ public class MainActivity extends Activity {
 
                 case MotionEvent.ACTION_MOVE:
 
+                    if (adjustingSensitivity) {
+                        updateSensitivity(x);
+                    }
+
                     if (dragging) {
+                        float pointerProjection =
+                                getProjection(x, y);
+
+                        float movement = pointerProjection
+                                - lastPointerProjection;
+
+                        progress += movement * sensitivity;
+                        progress = Math.max(0f,
+                                Math.min(1f, progress));
+
+                        lastPointerProjection = pointerProjection;
+
                         float dx = tx - sx;
                         float dy = ty - sy;
 
-                        float lengthSquared = dx * dx + dy * dy;
-
-                        if (lengthSquared > 0) {
-                            float projection =
-                                ((x - sx) * dx + (y - sy) * dy)
-                                / lengthSquared;
-
-                            projection = Math.max(0,
-                                    Math.min(1, projection));
-
-                            ax = sx + projection * dx;
-                            ay = sy + projection * dy;
-                        }
+                        ax = sx + progress * dx;
+                        ay = sy + progress * dy;
 
                         invalidate();
                     }
@@ -171,6 +245,7 @@ public class MainActivity extends Activity {
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
                     dragging = false;
+                    adjustingSensitivity = false;
                     return true;
             }
 
