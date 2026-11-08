@@ -24,7 +24,10 @@ public class MainActivity extends Activity {
         float sx, sy, tx, ty, ax, ay;
         float progress = 0f;
         float sensitivity = 1.0f;
+        float speedMultiplier = 1.0f;
         float lastPointerProjection = 0f;
+
+        int speedMode = 1;
 
         boolean ready = false;
         boolean dragging = false;
@@ -49,6 +52,20 @@ public class MainActivity extends Activity {
             value = Math.max(0f, Math.min(1f, value));
 
             sensitivity = 0.25f + value * 1.75f;
+            invalidate();
+        }
+
+        void setSpeed(int mode) {
+            speedMode = mode;
+
+            if (mode == 0) {
+                speedMultiplier = 0.5f;
+            } else if (mode == 1) {
+                speedMultiplier = 1.0f;
+            } else {
+                speedMultiplier = 1.5f;
+            }
+
             invalidate();
         }
 
@@ -99,7 +116,7 @@ public class MainActivity extends Activity {
             text(c, "DRAG THE CROSSHAIR TOWARDS TARGET",
                     30, 160, 13, white);
 
-            // Sensitivity control
+            // Sensitivity slider
             text(c, "SENSITIVITY: "
                     + String.format("%.2f", sensitivity) + "x",
                     30, 205, 15, cyan);
@@ -107,6 +124,7 @@ public class MainActivity extends Activity {
             float sliderY = 235;
             float sliderLeft = 30;
             float sliderRight = getWidth() - 30;
+
             float sliderPosition = sliderLeft
                     + ((sensitivity - 0.25f) / 1.75f)
                     * (sliderRight - sliderLeft);
@@ -127,6 +145,39 @@ public class MainActivity extends Activity {
 
             text(c, "0.25x", sliderLeft, 270, 11, white);
             text(c, "2.00x", sliderRight - 35, 270, 11, white);
+
+            // Drag speed selector
+            text(c, "DRAG SPEED", 30, 315, 15, cyan);
+
+            String[] speedNames = {"SLOW 0.5x",
+                    "NORMAL 1x", "FAST 1.5x"};
+
+            float buttonTop = 330;
+            float buttonBottom = 380;
+            float buttonWidth = (getWidth() - 80) / 3f;
+
+            for (int i = 0; i < 3; i++) {
+                float left = 30 + i * (buttonWidth + 10);
+                float right = left + buttonWidth;
+
+                p.setStyle(Paint.Style.FILL);
+                p.setColor(speedMode == i
+                        ? 0xFF183F50 : 0xFF202A3A);
+
+                c.drawRoundRect(left, buttonTop,
+                        right, buttonBottom, 10, 10, p);
+
+                p.setTextSize(12);
+                p.setTypeface(
+                        android.graphics.Typeface.DEFAULT_BOLD);
+
+                float textWidth = p.measureText(speedNames[i]);
+
+                text(c, speedNames[i],
+                        (left + right - textWidth) / 2f,
+                        buttonTop + 30, 12,
+                        speedMode == i ? cyan : white);
+            }
 
             // Selected movement path
             p.setColor(0x8846FF96);
@@ -156,15 +207,17 @@ public class MainActivity extends Activity {
             c.drawCircle(ax, ay, 9, p);
 
             // Reset button
-            float left = getWidth() / 2f - 75;
-            float top = getHeight() - 85;
+            float resetLeft = getWidth() / 2f - 75;
+            float resetTop = getHeight() - 85;
 
             p.setStyle(Paint.Style.FILL);
             p.setColor(0xFF183448);
-            c.drawRoundRect(left, top, left + 150,
-                    top + 48, 12, 12, p);
+            c.drawRoundRect(resetLeft, resetTop,
+                    resetLeft + 150, resetTop + 48,
+                    12, 12, p);
 
-            text(c, "RESET", left + 48, top + 31, 16, white);
+            text(c, "RESET",
+                    resetLeft + 48, resetTop + 31, 16, white);
 
             text(c, "MOVEMENT CANNOT PASS TARGET",
                     30, getHeight() - 110, 12, cyan);
@@ -196,13 +249,33 @@ public class MainActivity extends Activity {
                         return true;
                     }
 
+                    // Drag speed buttons
+                    if (y >= 330 && y <= 380) {
+                        float buttonWidth =
+                                (getWidth() - 80) / 3f;
+
+                        int selected = (int)
+                                ((x - 30) / (buttonWidth + 10));
+
+                        if (selected >= 0 && selected <= 2) {
+                            float left = 30
+                                    + selected * (buttonWidth + 10);
+
+                            if (x <= left + buttonWidth) {
+                                setSpeed(selected);
+                                return true;
+                            }
+                        }
+                    }
+
                     // Crosshair dragging
                     float distance = (float) Math.hypot(
                             x - ax, y - ay);
 
                     if (distance < 55) {
                         dragging = true;
-                        lastPointerProjection = getProjection(x, y);
+                        lastPointerProjection =
+                                getProjection(x, y);
                     } else {
                         // Select a new target
                         tx = x;
@@ -226,7 +299,9 @@ public class MainActivity extends Activity {
                         float movement = pointerProjection
                                 - lastPointerProjection;
 
-                        progress += movement * sensitivity;
+                        progress += movement
+                                * sensitivity * speedMultiplier;
+
                         progress = Math.max(0f,
                                 Math.min(1f, progress));
 
